@@ -1,12 +1,17 @@
 //引入
 const readline = require('readline');
 const { join } = require('path');
-const { readfileByline, isRegExp, hasProtocol } = require('../utils');
+const { readfileByline, isRegExp, hasProtocol, toRegExp } = require('../utils');
 const { URL } = require('url');
 const { isIP } = require('net');
+const protoMgr = require('./protocols');
 const WEB_PROTOCOL_RE = /^(?:https?|wss?):\/\//;
 const IPV4_RE = /^([\d.]+)(?:\:(\d+))?$/;
+const NO_SCHEMA_RE = /^\/\/[^/]/;
+const PORT_PATTERN_RE = /^!?:\d{1,5}$/;
 const hostCache = {};
+const protocols = protoMgr.protocols;
+const aliasProtocols = protoMgr.aliasProtocols;
 // pattern ip regExp hostname
 // matcher  protocol hostname
 
@@ -62,6 +67,90 @@ function indexOfPattern(list) {
 		}
 	}
 	return ipIndex;
+}
+function formatUrl(pattern) {
+	var queryString = '';
+	var queryIndex = pattern.indexOf('?');
+	if (queryIndex != -1) {
+		queryString = pattern.substring(queryIndex);
+		pattern = pattern.substring(0, queryIndex);
+	}
+	var index = pattern.indexOf('://');
+	index = pattern.indexOf('/', index == -1 ? 0 : index + 3);
+	return (index == -1 ? pattern + '/' : pattern) + queryString;
+}
+function parseRule(rulesMgr, pattern, matcher, raw, root, options) {
+	let rawPattern = pattern;
+	let noSchema;
+	let isRegExp, not, port, protocol, isExact;
+
+	if (!pattern) {
+		return;
+	}
+	if (
+		!isRegExp &&
+		(isRegExp = isRegExp(pattern)) &&
+		!(pattern = toRegExp(pattern))
+	) {
+		return;
+	}
+	var proxyName, isRules, statusCode;
+	if (isHost(matcher)) {
+		matcher = 'host://' + matcher;
+		protocol = 'host';
+	} else if (matcher[0] === '/') {
+		if (matcher[1] === '/') {
+			protocol = 'rule';
+		} else {
+			matcher = 'file://' + matcher;
+			protocol = 'file';
+		}
+	} else {
+		var index = matcher.indexOf('://');
+		var origProto;
+		if (index !== -1) {
+			origProto = matcher.substring(0, index);
+			protocol = aliasProtocols[origProto];
+		}
+		if (!protocol) {
+			protocol = origProto;
+			if (matcher === 'host://') {
+				matcher = 'host://127.0.0.1';
+			}
+		}
+	}
+	var rules = rulesMgr._rules;
+	var list = rules[protocol];
+	if (!list) {
+		protocol = 'rule';
+		list = rules.rule;
+	} else if (protocol == 'host') {
+		var protoIndex = matcher.indexOf(':') + 3;
+		var realProto = matcher.substring(0, protoIndex);
+		var opts = isHost(matcher.substring(protoIndex));
+		if (opts) {
+			matcher = realProto + opts.host;
+			port = opts.port;
+		}
+	}
+	var rule = {
+		name: protocol,
+		isRegExp: isRegExp,
+		protocol: isRegExp ? null : getProtocol(pattern),
+		pattern: isRegExp ? pattern : formatUrl(pattern),
+		matcher: matcher,
+		port: port,
+		raw: raw,
+		isDomain:
+			!isRegExp &&
+			!not &&
+			(noSchema
+				? pattern
+				: util.removeProtocol(rawPattern, true)
+			).indexOf('/') == -1,
+		rawPattern: rawPattern
+	};
+	list.push(rule);
 }
 
 async function parseText(rawRules) {

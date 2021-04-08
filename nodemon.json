@@ -1,0 +1,9 @@
+{
+	"restartable": "rs",
+	"verbose": true,
+	"watch": ["lib/"],
+	"ignore": [],
+	"delay": "1000",
+	"ext": "js",
+	"exec": "node lib/index.js"
+}

@@ -1,5 +1,11 @@
 {
-  "dependencies": {
-    "express": "^4.17.1"
-  }
+	"scripts": {
+		"watch": "nodemon --config nodemon.json"
+	},
+	"dependencies": {
+		"express": "^4.17.1"
+	},
+	"devDependencies": {
+		"nodemon": "^2.0.7"
+	}
 }
